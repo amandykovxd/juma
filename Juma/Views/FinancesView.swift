@@ -50,7 +50,7 @@ struct FinancesView: View {
                     Button {
                         isImportingCSV = true
                     } label: {
-                        Label("Импорт CSV", systemImage: "square.and.arrow.down")
+                        Label("Импорт выписки", systemImage: "square.and.arrow.down")
                     }
                 }
                 ToolbarItem(placement: .primaryAction) {
@@ -66,7 +66,7 @@ struct FinancesView: View {
             }
             .fileImporter(
                 isPresented: $isImportingCSV,
-                allowedContentTypes: [.commaSeparatedText, .plainText]
+                allowedContentTypes: [.pdf, .commaSeparatedText, .plainText]
             ) { result in
                 handleImport(result)
             }
@@ -141,13 +141,18 @@ struct FinancesView: View {
             let hasAccess = url.startAccessingSecurityScopedResource()
             defer { if hasAccess { url.stopAccessingSecurityScopedResource() } }
             do {
-                let content = try String(contentsOf: url, encoding: .utf8)
-                let imported = CSVImporter.parse(content)
+                let imported: [MoneyTransaction]
+                if url.pathExtension.lowercased() == "pdf" {
+                    imported = KaspiStatementImporter.parse(pdfURL: url)
+                } else {
+                    let content = try String(contentsOf: url, encoding: .utf8)
+                    imported = CSVImporter.parse(content)
+                }
                 for transaction in imported {
                     modelContext.insert(transaction)
                 }
                 importMessage = imported.isEmpty
-                    ? "В файле не нашлось операций. Формат строк: дата, сумма, категория, заметка (отрицательная сумма — расход)."
+                    ? "В файле не нашлось операций. Поддерживаются PDF-выписка Kaspi и CSV со строками: дата, сумма, категория, заметка (отрицательная сумма — расход)."
                     : "Импортировано операций: \(imported.count)."
             } catch {
                 importMessage = "Не удалось прочитать файл: \(error.localizedDescription)"
@@ -276,7 +281,7 @@ enum CSVImporter {
                 .map { $0.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "\"")) }
             guard fields.count >= 2 else { continue }
 
-            guard let date = parseDate(fields[0]) else { continue } // пропускаем заголовок
+            guard let date = DateParsing.parse(fields[0]) else { continue } // пропускаем заголовок
             let normalizedAmount = fields[1]
                 .replacingOccurrences(of: ",", with: ".")
                 .replacingOccurrences(of: " ", with: "")
@@ -295,18 +300,5 @@ enum CSVImporter {
         }
 
         return result
-    }
-
-    private static func parseDate(_ text: String) -> Date? {
-        let formats = ["yyyy-MM-dd", "dd.MM.yyyy", "dd/MM/yyyy"]
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        for format in formats {
-            formatter.dateFormat = format
-            if let date = formatter.date(from: text) {
-                return date
-            }
-        }
-        return nil
     }
 }

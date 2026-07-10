@@ -170,6 +170,9 @@ final class Note {
     var tags: String = ""
     var createdAt: Date = Date()
     var modifiedAt: Date = Date()
+    /// Векторное представление заметки для семантического поиска.
+    var embedding: [Double]?
+    var embeddedAt: Date?
 
     init(title: String, content: String = "", tags: String = "") {
         self.title = title

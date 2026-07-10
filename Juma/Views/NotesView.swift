@@ -8,6 +8,7 @@ struct NotesView: View {
     @State private var searchText = ""
     @State private var editingNote: Note?
     @State private var isAddingNote = false
+    @State private var isAskPresented = false
 
     private var filteredNotes: [Note] {
         let query = searchText.trimmingCharacters(in: .whitespaces)
@@ -46,6 +47,13 @@ struct NotesView: View {
             .searchable(text: $searchText, prompt: "Поиск по заметкам")
             .navigationTitle("Заметки")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        isAskPresented = true
+                    } label: {
+                        Label("Спросить базу", systemImage: "sparkle.magnifyingglass")
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         isAddingNote = true
@@ -56,6 +64,9 @@ struct NotesView: View {
             }
             .sheet(isPresented: $isAddingNote) {
                 NoteEditorView(note: nil)
+            }
+            .sheet(isPresented: $isAskPresented) {
+                AskView()
             }
             .sheet(item: $editingNote) { note in
                 NoteEditorView(note: note)
@@ -168,6 +179,7 @@ struct NoteEditorView: View {
             note.content = content
             note.tags = tags
             note.modifiedAt = Date()
+            note.embeddedAt = nil // заметка изменилась — вектор пересчитается при следующем поиске
         } else {
             let newNote = Note(title: title, content: content, tags: tags)
             modelContext.insert(newNote)
