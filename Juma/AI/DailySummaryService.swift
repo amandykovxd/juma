@@ -42,8 +42,9 @@ enum DailySummaryService {
             let session = LanguageModelSession(instructions: """
                 Ты — личный ассистент в приложении Juma для управления жизнью. \
                 Твоя задача — составлять краткую, конкретную и дружелюбную сводку дня \
-                на русском языке по задачам и привычкам пользователя. \
-                Опирайся только на переданные данные, ничего не выдумывай.
+                по задачам, привычкам, финансам и здоровью пользователя. \
+                Опирайся только на переданные данные, ничего не выдумывай. \
+                \(responseLanguageInstruction)
                 """)
             let response = try await session.respond(
                 to: "Составь сводку дня по этим данным.\n\n\(context)",
@@ -55,18 +56,27 @@ enum DailySummaryService {
         }
     }
 
+    /// Язык ответа модели — по языку интерфейса приложения.
+    static var responseLanguageInstruction: String {
+        switch Locale.current.language.languageCode?.identifier {
+        case "en": "Отвечай на английском языке."
+        case "kk": "Отвечай на казахском языке."
+        default: "Отвечай на русском языке."
+        }
+    }
+
     private static func unavailabilityMessage(_ availability: SystemLanguageModel.Availability) -> String {
         switch availability {
         case .available:
             return ""
         case .unavailable(.deviceNotEligible):
-            return "Это устройство не поддерживает Apple Intelligence — показана обычная сводка."
+            return String(localized: "Это устройство не поддерживает Apple Intelligence — показана обычная сводка.")
         case .unavailable(.appleIntelligenceNotEnabled):
-            return "Apple Intelligence выключен. Включите его в Настройках, чтобы получать AI-сводку."
+            return String(localized: "Apple Intelligence выключен. Включите его в Настройках, чтобы получать AI-сводку.")
         case .unavailable(.modelNotReady):
-            return "Локальная модель ещё загружается. Попробуйте чуть позже."
+            return String(localized: "Локальная модель ещё загружается. Попробуйте чуть позже.")
         case .unavailable:
-            return "Локальная модель сейчас недоступна — показана обычная сводка."
+            return String(localized: "Локальная модель сейчас недоступна — показана обычная сводка.")
         }
     }
 
@@ -77,7 +87,10 @@ enum DailySummaryService {
         habits: [Habit],
         transactions: [MoneyTransaction] = [],
         steps: Int? = nil,
-        sleepHours: Double? = nil
+        sleepHours: Double? = nil,
+        subscriptions: [Subscription] = [],
+        focusSessions: [FocusSession] = [],
+        moods: [MoodEntry] = []
     ) -> String {
         var lines: [String] = []
         let today = Date.now.formatted(date: .long, time: .omitted)
@@ -136,6 +149,28 @@ enum DailySummaryService {
             for (category, total) in grouped.sorted(by: { $0.value > $1.value }).prefix(3) {
                 lines.append("- \(category): \(total.asCurrency)")
             }
+        }
+
+        let activeSubscriptions = subscriptions.filter(\.isActive)
+        if !activeSubscriptions.isEmpty {
+            let monthly = activeSubscriptions.reduce(Decimal(0)) { $0 + $1.monthlyEquivalent }
+            lines.append("\nПодписки: \(activeSubscriptions.count) шт., ~\(monthly.asCurrency) в месяц.")
+            for subscription in activeSubscriptions.filter(\.chargesTomorrow) {
+                lines.append("- ВАЖНО: завтра спишется \(subscription.amount.asCurrency) за \(subscription.name).")
+            }
+        }
+
+        let todayFocus = focusSessions.filter { Calendar.current.isDateInToday($0.startedAt) }
+        if !todayFocus.isEmpty {
+            let minutes = todayFocus.reduce(0) { $0 + $1.minutes }
+            let labels = Set(todayFocus.map(\.label).filter { !$0.isEmpty }).joined(separator: ", ")
+            lines.append("\nФокус-работа сегодня: \(minutes) мин." + (labels.isEmpty ? "" : " Над: \(labels)."))
+        }
+
+        if let todayMood = moods.first(where: { Calendar.current.isDateInToday($0.date) }) {
+            var moodLine = "\nНастроение сегодня: \(todayMood.emoji) (\(todayMood.score)/5)"
+            if !todayMood.note.isEmpty { moodLine += ", комментарий: \(todayMood.note)" }
+            lines.append(moodLine + ".")
         }
 
         return lines.joined(separator: "\n")

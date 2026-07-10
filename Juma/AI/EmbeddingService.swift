@@ -16,9 +16,9 @@ final class EmbeddingService {
 
         var errorDescription: String? {
             switch self {
-            case .modelUnavailable: "Модель эмбеддингов недоступна на этом устройстве."
-            case .assetsUnavailable: "Не удалось скачать модель эмбеддингов. Проверьте интернет и место на устройстве."
-            case .emptyResult: "Не удалось построить вектор для текста."
+            case .modelUnavailable: String(localized: "Модель эмбеддингов недоступна на этом устройстве.")
+            case .assetsUnavailable: String(localized: "Не удалось скачать модель эмбеддингов. Проверьте интернет и место на устройстве.")
+            case .emptyResult: String(localized: "Не удалось построить вектор для текста.")
             }
         }
     }

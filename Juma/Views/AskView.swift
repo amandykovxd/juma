@@ -191,8 +191,9 @@ struct AskView: View {
 
         let session = LanguageModelSession(instructions: """
             Ты — ассистент личной базы знаний в приложении Juma. \
-            Отвечай на вопрос пользователя кратко и по делу, на русском языке, \
-            опираясь ТОЛЬКО на переданные заметки. Если в заметках нет ответа — честно скажи об этом.
+            Отвечай на вопрос пользователя кратко и по делу, \
+            опираясь ТОЛЬКО на переданные заметки. Если в заметках нет ответа — честно скажи об этом. \
+            \(DailySummaryService.responseLanguageInstruction)
             """)
         let response = try? await session.respond(
             to: "Вопрос: \(question)\n\nЗаметки:\n\(context)"

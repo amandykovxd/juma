@@ -9,6 +9,8 @@ struct NotesView: View {
     @State private var editingNote: Note?
     @State private var isAddingNote = false
     @State private var isAskPresented = false
+    @State private var isRecordingVoice = false
+    @State private var isScanning = false
 
     private var filteredNotes: [Note] {
         let query = searchText.trimmingCharacters(in: .whitespaces)
@@ -55,8 +57,23 @@ struct NotesView: View {
                     }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        isAddingNote = true
+                    Menu {
+                        Button {
+                            isAddingNote = true
+                        } label: {
+                            Label("Текстовая заметка", systemImage: "square.and.pencil")
+                        }
+                        Button {
+                            isRecordingVoice = true
+                        } label: {
+                            Label("Голосовая заметка", systemImage: "mic")
+                        }
+                        Button {
+                            isScanning = true
+                        } label: {
+                            Label("Скан документа (OCR)", systemImage: "doc.viewfinder")
+                        }
+                        .disabled(!DocumentScanView.isSupported)
                     } label: {
                         Label("Добавить", systemImage: "plus")
                     }
@@ -68,10 +85,32 @@ struct NotesView: View {
             .sheet(isPresented: $isAskPresented) {
                 AskView()
             }
+            .sheet(isPresented: $isRecordingVoice) {
+                VoiceNoteView()
+            }
+            .fullScreenCover(isPresented: $isScanning) {
+                DocumentScanView { text in
+                    isScanning = false
+                    saveScan(text)
+                } onCancel: {
+                    isScanning = false
+                }
+                .ignoresSafeArea()
+            }
             .sheet(item: $editingNote) { note in
                 NoteEditorView(note: note)
             }
         }
+    }
+}
+
+extension NotesView {
+    fileprivate func saveScan(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let title = String(localized: "Скан \(Date.now.formatted(date: .abbreviated, time: .shortened))")
+        let note = Note(title: title, content: trimmed, tags: String(localized: "скан"))
+        modelContext.insert(note)
     }
 }
 

@@ -5,7 +5,7 @@ enum ExportService {
 
     // MARK: - Markdown
 
-    static func markdown(tasks: [TaskItem], habits: [Habit], notes: [Note], transactions: [MoneyTransaction] = []) -> String {
+    static func markdown(tasks: [TaskItem], habits: [Habit], notes: [Note], transactions: [MoneyTransaction] = [], contacts: [Contact] = [], subscriptions: [Subscription] = []) -> String {
         var lines: [String] = []
         let now = Date.now.formatted(date: .long, time: .shortened)
 
@@ -79,6 +79,38 @@ enum ExportService {
             }
         }
 
+        // Подписки
+        if !subscriptions.isEmpty {
+            lines.append("")
+            lines.append("## Подписки")
+            let monthly = subscriptions.filter(\.isActive).reduce(Decimal(0)) { $0 + $1.monthlyEquivalent }
+            lines.append("Итого в месяц: ~\(monthly.asCurrency)")
+            for subscription in subscriptions {
+                let period = subscription.period == .month ? "в месяц" : "в год"
+                lines.append("- \(subscription.name): \(subscription.amount.asCurrency) \(period), следующее списание \(subscription.nextChargeDate.formatted(date: .numeric, time: .omitted))")
+            }
+        }
+
+        // Люди (CRM)
+        if !contacts.isEmpty {
+            lines.append("")
+            lines.append("## Люди (\(contacts.count))")
+            for contact in contacts {
+                var line = "- \(contact.fullName)"
+                let job = [contact.position, contact.company].filter { !$0.isEmpty }.joined(separator: ", ")
+                if !job.isEmpty { line += " — \(job)" }
+                lines.append(line)
+                if !contact.careerHistory.isEmpty {
+                    for change in contact.careerHistory.split(separator: "\n") {
+                        lines.append("  - смена работы: \(change)")
+                    }
+                }
+                if !contact.notes.isEmpty {
+                    lines.append("  - заметка: \(contact.notes)")
+                }
+            }
+        }
+
         // Заметки
         lines.append("")
         lines.append("## Заметки")
@@ -133,6 +165,25 @@ enum ExportService {
         var date: Date
     }
 
+    struct ExportedContact: Codable {
+        var fullName: String
+        var company: String
+        var position: String
+        var email: String
+        var phone: String
+        var linkedInURL: String
+        var notes: String
+        var careerHistory: String
+    }
+
+    struct ExportedSubscription: Codable {
+        var name: String
+        var amount: String
+        var period: String
+        var nextChargeDate: Date
+        var isActive: Bool
+    }
+
     struct ExportPayload: Codable {
         var app: String
         var exportedAt: Date
@@ -140,9 +191,11 @@ enum ExportService {
         var habits: [ExportedHabit]
         var notes: [ExportedNote]
         var transactions: [ExportedTransaction]
+        var contacts: [ExportedContact]
+        var subscriptions: [ExportedSubscription]
     }
 
-    static func json(tasks: [TaskItem], habits: [Habit], notes: [Note], transactions: [MoneyTransaction] = []) throws -> Data {
+    static func json(tasks: [TaskItem], habits: [Habit], notes: [Note], transactions: [MoneyTransaction] = [], contacts: [Contact] = [], subscriptions: [Subscription] = []) throws -> Data {
         let payload = ExportPayload(
             app: "Juma",
             exportedAt: Date(),
@@ -182,6 +235,27 @@ enum ExportService {
                     note: $0.note,
                     date: $0.date
                 )
+            },
+            contacts: contacts.map {
+                ExportedContact(
+                    fullName: $0.fullName,
+                    company: $0.company,
+                    position: $0.position,
+                    email: $0.email,
+                    phone: $0.phone,
+                    linkedInURL: $0.linkedInURL,
+                    notes: $0.notes,
+                    careerHistory: $0.careerHistory
+                )
+            },
+            subscriptions: subscriptions.map {
+                ExportedSubscription(
+                    name: $0.name,
+                    amount: "\($0.amount)",
+                    period: $0.periodRaw,
+                    nextChargeDate: $0.nextChargeDate,
+                    isActive: $0.isActive
+                )
             }
         )
 
@@ -194,15 +268,15 @@ enum ExportService {
     // MARK: - Запись файлов
 
     /// Пишет оба файла во временную папку и возвращает URL для ShareLink.
-    static func writeFiles(tasks: [TaskItem], habits: [Habit], notes: [Note], transactions: [MoneyTransaction] = []) throws -> (markdown: URL, json: URL) {
+    static func writeFiles(tasks: [TaskItem], habits: [Habit], notes: [Note], transactions: [MoneyTransaction] = [], contacts: [Contact] = [], subscriptions: [Subscription] = []) throws -> (markdown: URL, json: URL) {
         let directory = FileManager.default.temporaryDirectory
 
         let markdownURL = directory.appendingPathComponent("Juma-Export.md")
-        try markdown(tasks: tasks, habits: habits, notes: notes, transactions: transactions)
+        try markdown(tasks: tasks, habits: habits, notes: notes, transactions: transactions, contacts: contacts, subscriptions: subscriptions)
             .write(to: markdownURL, atomically: true, encoding: .utf8)
 
         let jsonURL = directory.appendingPathComponent("Juma-Export.json")
-        try json(tasks: tasks, habits: habits, notes: notes, transactions: transactions)
+        try json(tasks: tasks, habits: habits, notes: notes, transactions: transactions, contacts: contacts, subscriptions: subscriptions)
             .write(to: jsonURL, options: .atomic)
 
         return (markdownURL, jsonURL)

@@ -6,6 +6,9 @@ struct TodayView: View {
     @Query(sort: \TaskItem.createdAt, order: .reverse) private var tasks: [TaskItem]
     @Query(sort: \Habit.createdAt) private var habits: [Habit]
     @Query(sort: \MoneyTransaction.date, order: .reverse) private var transactions: [MoneyTransaction]
+    @Query private var subscriptions: [Subscription]
+    @Query(sort: \FocusSession.startedAt, order: .reverse) private var focusSessions: [FocusSession]
+    @Query(sort: \MoodEntry.date, order: .reverse) private var moods: [MoodEntry]
 
     enum SummaryState {
         case idle
@@ -30,6 +33,7 @@ struct TodayView: View {
         NavigationStack {
             List {
                 summarySection
+                moodSection
                 tasksSection
                 habitsSection
                 healthSection
@@ -138,7 +142,10 @@ struct TodayView: View {
             habits: habits,
             transactions: transactions,
             steps: healthService.todaySteps,
-            sleepHours: healthService.lastNightSleepHours
+            sleepHours: healthService.lastNightSleepHours,
+            subscriptions: subscriptions,
+            focusSessions: focusSessions,
+            moods: moods
         )
         let fallback = DailySummaryService.ruleBasedSummary(
             tasks: tasks,
@@ -168,6 +175,49 @@ struct TodayView: View {
             ForEach(todayTasks) { task in
                 TaskRowView(task: task)
             }
+        }
+    }
+
+    // MARK: - Настроение
+
+    private var todayMood: MoodEntry? {
+        moods.first { Calendar.current.isDateInToday($0.date) }
+    }
+
+    private var moodSection: some View {
+        Section("Настроение") {
+            HStack(spacing: 0) {
+                ForEach(1...5, id: \.self) { score in
+                    Button {
+                        setMood(score)
+                    } label: {
+                        Text(MoodEntry.emojis[score - 1])
+                            .font(.title2)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 4)
+                            .background(
+                                Circle()
+                                    .fill(todayMood?.score == score ? Color.accentColor.opacity(0.2) : Color.clear)
+                            )
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+            if let todayMood {
+                TextField("Пара слов о дне (необязательно)", text: Binding(
+                    get: { todayMood.note },
+                    set: { todayMood.note = $0 }
+                ))
+                .font(.subheadline)
+            }
+        }
+    }
+
+    private func setMood(_ score: Int) {
+        if let todayMood {
+            todayMood.score = score
+        } else {
+            modelContext.insert(MoodEntry(date: .now, score: score))
         }
     }
 

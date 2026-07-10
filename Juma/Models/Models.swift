@@ -12,9 +12,9 @@ enum TaskPriority: Int, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .low: "Низкий"
-        case .normal: "Обычный"
-        case .high: "Высокий"
+        case .low: String(localized: "Низкий")
+        case .normal: String(localized: "Обычный")
+        case .high: String(localized: "Высокий")
         }
     }
 
@@ -157,6 +157,132 @@ extension Decimal {
     var asCurrency: String {
         let code = Locale.current.currency?.identifier ?? "USD"
         return formatted(.currency(code: code).precision(.fractionLength(0...2)))
+    }
+}
+
+// MARK: - CRM (люди)
+
+@Model
+final class Contact {
+    var fullName: String = ""
+    var company: String = ""
+    var position: String = ""
+    var email: String = ""
+    var phone: String = ""
+    var linkedInURL: String = ""
+    /// Откуда контакт: phone | linkedin | manual
+    var source: String = "manual"
+    var notes: String = ""
+    /// Лог смен работы, по строке на событие: «10.07.2026: Kaspi (Manager) → Halyk (Director)»
+    var careerHistory: String = ""
+    var hasRecentJobChange: Bool = false
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+
+    init(fullName: String, company: String = "", position: String = "", email: String = "",
+         phone: String = "", linkedInURL: String = "", source: String = "manual") {
+        self.fullName = fullName
+        self.company = company
+        self.position = position
+        self.email = email
+        self.phone = phone
+        self.linkedInURL = linkedInURL
+        self.source = source
+        self.createdAt = Date()
+        self.updatedAt = Date()
+    }
+}
+
+// MARK: - Подписки
+
+enum SubscriptionPeriod: String, CaseIterable, Identifiable {
+    case month
+    case year
+    var id: String { rawValue }
+}
+
+@Model
+final class Subscription {
+    var name: String = ""
+    var amount: Decimal = 0
+    var periodRaw: String = SubscriptionPeriod.month.rawValue
+    var nextChargeDate: Date = Date()
+    var isActive: Bool = true
+    var createdAt: Date = Date()
+
+    init(name: String, amount: Decimal, period: SubscriptionPeriod, nextChargeDate: Date) {
+        self.name = name
+        self.amount = amount
+        self.periodRaw = period.rawValue
+        self.nextChargeDate = nextChargeDate
+        self.createdAt = Date()
+    }
+
+    var period: SubscriptionPeriod {
+        get { SubscriptionPeriod(rawValue: periodRaw) ?? .month }
+        set { periodRaw = newValue.rawValue }
+    }
+
+    var monthlyEquivalent: Decimal {
+        period == .year ? amount / 12 : amount
+    }
+
+    /// Идентификатор локального уведомления.
+    var notificationID: String {
+        "subscription-\(persistentModelID.hashValue)"
+    }
+
+    /// Сдвигает дату списания вперёд, если она уже прошла.
+    func rollForwardIfNeeded() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: .now)
+        while calendar.startOfDay(for: nextChargeDate) < today {
+            let component: Calendar.Component = period == .month ? .month : .year
+            guard let next = calendar.date(byAdding: component, value: 1, to: nextChargeDate) else { break }
+            nextChargeDate = next
+        }
+    }
+
+    var chargesTomorrow: Bool {
+        Calendar.current.isDateInTomorrow(nextChargeDate)
+    }
+}
+
+// MARK: - Фокус (помодоро)
+
+@Model
+final class FocusSession {
+    var startedAt: Date = Date()
+    var minutes: Int = 25
+    var label: String = ""
+
+    init(startedAt: Date, minutes: Int, label: String) {
+        self.startedAt = startedAt
+        self.minutes = minutes
+        self.label = label
+    }
+}
+
+// MARK: - Настроение
+
+@Model
+final class MoodEntry {
+    /// Начало дня.
+    var date: Date = Date()
+    /// 1 (плохо) … 5 (отлично).
+    var score: Int = 3
+    var note: String = ""
+
+    static let emojis = ["😞", "😕", "😐", "🙂", "😄"]
+
+    init(date: Date, score: Int, note: String = "") {
+        self.date = Calendar.current.startOfDay(for: date)
+        self.score = score
+        self.note = note
+    }
+
+    var emoji: String {
+        Self.emojis[max(0, min(Self.emojis.count - 1, score - 1))]
     }
 }
 

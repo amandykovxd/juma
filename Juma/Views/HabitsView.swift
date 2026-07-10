@@ -7,37 +7,35 @@ struct HabitsView: View {
     @State private var isAddingHabit = false
 
     var body: some View {
-        NavigationStack {
-            List {
-                if habits.isEmpty {
-                    ContentUnavailableView(
-                        "Нет привычек",
-                        systemImage: "repeat.circle",
-                        description: Text("Добавьте первую привычку — например, «Зарядка» или «Чтение 20 минут».")
-                    )
-                }
-                ForEach(habits) { habit in
-                    HabitRowView(habit: habit)
-                }
-                .onDelete { offsets in
-                    for index in offsets {
-                        modelContext.delete(habits[index])
-                    }
+        List {
+            if habits.isEmpty {
+                ContentUnavailableView(
+                    "Нет привычек",
+                    systemImage: "repeat.circle",
+                    description: Text("Добавьте первую привычку — например, «Зарядка» или «Чтение 20 минут».")
+                )
+            }
+            ForEach(habits) { habit in
+                HabitRowView(habit: habit)
+            }
+            .onDelete { offsets in
+                for index in offsets {
+                    modelContext.delete(habits[index])
                 }
             }
-            .navigationTitle("Привычки")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        isAddingHabit = true
-                    } label: {
-                        Label("Добавить", systemImage: "plus")
-                    }
+        }
+        .navigationTitle("Привычки")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    isAddingHabit = true
+                } label: {
+                    Label("Добавить", systemImage: "plus")
                 }
             }
-            .sheet(isPresented: $isAddingHabit) {
-                HabitEditorView()
-            }
+        }
+        .sheet(isPresented: $isAddingHabit) {
+            HabitEditorView()
         }
     }
 }
