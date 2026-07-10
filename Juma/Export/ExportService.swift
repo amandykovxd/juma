@@ -5,7 +5,7 @@ enum ExportService {
 
     // MARK: - Markdown
 
-    static func markdown(tasks: [TaskItem], habits: [Habit], notes: [Note]) -> String {
+    static func markdown(tasks: [TaskItem], habits: [Habit], notes: [Note], transactions: [MoneyTransaction] = []) -> String {
         var lines: [String] = []
         let now = Date.now.formatted(date: .long, time: .shortened)
 
@@ -58,6 +58,27 @@ enum ExportService {
             lines.append("- \(habit.emoji) \(habit.name) — серия: \(habit.currentStreak) дн., \(status), всего отметок: \(habit.logs.count)")
         }
 
+        // Финансы
+        lines.append("")
+        lines.append("## Финансы")
+        if transactions.isEmpty {
+            lines.append("_нет операций_")
+        } else {
+            let monthTransactions = transactions.filter {
+                Calendar.current.isDate($0.date, equalTo: .now, toGranularity: .month)
+            }
+            let income = monthTransactions.filter { !$0.isExpense }.reduce(Decimal(0)) { $0 + $1.amount }
+            let expenses = monthTransactions.filter(\.isExpense).reduce(Decimal(0)) { $0 + $1.amount }
+            lines.append("Текущий месяц: доходы \(income.asCurrency), расходы \(expenses.asCurrency).")
+            lines.append("")
+            lines.append("| Дата | Сумма | Категория | Заметка |")
+            lines.append("|---|---|---|---|")
+            for transaction in transactions.sorted(by: { $0.date > $1.date }) {
+                let sign = transaction.isExpense ? "−" : "+"
+                lines.append("| \(transaction.date.formatted(date: .numeric, time: .omitted)) | \(sign)\(transaction.amount.asCurrency) | \(transaction.category) | \(transaction.note) |")
+            }
+        }
+
         // Заметки
         lines.append("")
         lines.append("## Заметки")
@@ -104,15 +125,24 @@ enum ExportService {
         var modifiedAt: Date
     }
 
+    struct ExportedTransaction: Codable {
+        var amount: String
+        var isExpense: Bool
+        var category: String
+        var note: String
+        var date: Date
+    }
+
     struct ExportPayload: Codable {
         var app: String
         var exportedAt: Date
         var tasks: [ExportedTask]
         var habits: [ExportedHabit]
         var notes: [ExportedNote]
+        var transactions: [ExportedTransaction]
     }
 
-    static func json(tasks: [TaskItem], habits: [Habit], notes: [Note]) throws -> Data {
+    static func json(tasks: [TaskItem], habits: [Habit], notes: [Note], transactions: [MoneyTransaction] = []) throws -> Data {
         let payload = ExportPayload(
             app: "Juma",
             exportedAt: Date(),
@@ -143,6 +173,15 @@ enum ExportService {
                     createdAt: $0.createdAt,
                     modifiedAt: $0.modifiedAt
                 )
+            },
+            transactions: transactions.map {
+                ExportedTransaction(
+                    amount: "\($0.amount)",
+                    isExpense: $0.isExpense,
+                    category: $0.category,
+                    note: $0.note,
+                    date: $0.date
+                )
             }
         )
 
@@ -155,15 +194,15 @@ enum ExportService {
     // MARK: - Запись файлов
 
     /// Пишет оба файла во временную папку и возвращает URL для ShareLink.
-    static func writeFiles(tasks: [TaskItem], habits: [Habit], notes: [Note]) throws -> (markdown: URL, json: URL) {
+    static func writeFiles(tasks: [TaskItem], habits: [Habit], notes: [Note], transactions: [MoneyTransaction] = []) throws -> (markdown: URL, json: URL) {
         let directory = FileManager.default.temporaryDirectory
 
         let markdownURL = directory.appendingPathComponent("Juma-Export.md")
-        try markdown(tasks: tasks, habits: habits, notes: notes)
+        try markdown(tasks: tasks, habits: habits, notes: notes, transactions: transactions)
             .write(to: markdownURL, atomically: true, encoding: .utf8)
 
         let jsonURL = directory.appendingPathComponent("Juma-Export.json")
-        try json(tasks: tasks, habits: habits, notes: notes)
+        try json(tasks: tasks, habits: habits, notes: notes, transactions: transactions)
             .write(to: jsonURL, options: .atomic)
 
         return (markdownURL, jsonURL)

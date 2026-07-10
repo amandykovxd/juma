@@ -121,6 +121,45 @@ final class HabitLog {
     }
 }
 
+// MARK: - Финансы
+
+@Model
+final class MoneyTransaction {
+    var amount: Decimal = 0
+    var isExpense: Bool = true
+    var category: String = ""
+    var note: String = ""
+    var date: Date = Date()
+    var createdAt: Date = Date()
+
+    init(amount: Decimal, isExpense: Bool, category: String, note: String = "", date: Date = .now) {
+        self.amount = amount
+        self.isExpense = isExpense
+        self.category = category
+        self.note = note
+        self.date = date
+        self.createdAt = Date()
+    }
+
+    /// Со знаком: расходы отрицательные.
+    var signedAmount: Decimal {
+        isExpense ? -amount : amount
+    }
+}
+
+enum TransactionCategories {
+    static let expense = ["🛒 Продукты", "🍽 Кафе", "🚗 Транспорт", "🏠 Жильё", "💊 Здоровье", "🎬 Развлечения", "📱 Подписки", "🛍 Покупки", "📦 Другое"]
+    static let income = ["💼 Зарплата", "💸 Фриланс", "🎁 Подарок", "📦 Другое"]
+}
+
+extension Decimal {
+    /// Форматирование в валюте устройства (например, ₸ для Казахстана).
+    var asCurrency: String {
+        let code = Locale.current.currency?.identifier ?? "USD"
+        return formatted(.currency(code: code).precision(.fractionLength(0...2)))
+    }
+}
+
 // MARK: - Заметки (база знаний)
 
 @Model

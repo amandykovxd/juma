@@ -7,7 +7,7 @@ struct JumaApp: App {
         WindowGroup {
             RootView()
         }
-        .modelContainer(for: [TaskItem.self, Habit.self, HabitLog.self, Note.self])
+        .modelContainer(for: [TaskItem.self, Habit.self, HabitLog.self, Note.self, MoneyTransaction.self])
     }
 }
 
@@ -20,15 +20,15 @@ struct RootView: View {
                 .tabItem { Label("Задачи", systemImage: "checklist") }
             HabitsView()
                 .tabItem { Label("Привычки", systemImage: "repeat.circle.fill") }
+            FinancesView()
+                .tabItem { Label("Финансы", systemImage: "banknote") }
             NotesView()
                 .tabItem { Label("Заметки", systemImage: "note.text") }
-            ExportView()
-                .tabItem { Label("Экспорт", systemImage: "square.and.arrow.up") }
         }
     }
 }
 
 #Preview {
     RootView()
-        .modelContainer(for: [TaskItem.self, Habit.self, HabitLog.self, Note.self], inMemory: true)
+        .modelContainer(for: [TaskItem.self, Habit.self, HabitLog.self, Note.self, MoneyTransaction.self], inMemory: true)
 }

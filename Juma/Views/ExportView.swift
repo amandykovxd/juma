@@ -2,9 +2,11 @@ import SwiftUI
 import SwiftData
 
 struct ExportView: View {
+    @Environment(\.dismiss) private var dismiss
     @Query private var tasks: [TaskItem]
     @Query private var habits: [Habit]
     @Query(sort: \Note.modifiedAt, order: .reverse) private var notes: [Note]
+    @Query private var transactions: [MoneyTransaction]
 
     @State private var markdownURL: URL?
     @State private var jsonURL: URL?
@@ -50,9 +52,15 @@ struct ExportView: View {
                     LabeledContent("Задачи", value: "\(tasks.count)")
                     LabeledContent("Привычки", value: "\(habits.count)")
                     LabeledContent("Заметки", value: "\(notes.count)")
+                    LabeledContent("Операции", value: "\(transactions.count)")
                 }
             }
             .navigationTitle("Экспорт")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Готово") { dismiss() }
+                }
+            }
             .onAppear {
                 generate()
             }
@@ -61,7 +69,7 @@ struct ExportView: View {
 
     private func generate() {
         do {
-            let urls = try ExportService.writeFiles(tasks: tasks, habits: habits, notes: notes)
+            let urls = try ExportService.writeFiles(tasks: tasks, habits: habits, notes: notes, transactions: transactions)
             markdownURL = urls.markdown
             jsonURL = urls.json
             errorMessage = nil

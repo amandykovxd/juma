@@ -15,6 +15,9 @@ struct DailySummary {
 
     @Guide(description: "Короткий совет по привычкам с учётом серий, 1–2 предложения на русском языке")
     var habitAdvice: String
+
+    @Guide(description: "Короткий совет по здоровью и финансам на основе шагов, сна и расходов, 1–2 предложения на русском языке")
+    var healthAdvice: String
 }
 
 enum SummaryOutcome {
@@ -69,7 +72,13 @@ enum DailySummaryService {
 
     // MARK: - Подготовка контекста (вызывается на главном акторе)
 
-    static func contextDescription(tasks: [TaskItem], habits: [Habit]) -> String {
+    static func contextDescription(
+        tasks: [TaskItem],
+        habits: [Habit],
+        transactions: [MoneyTransaction] = [],
+        steps: Int? = nil,
+        sleepHours: Double? = nil
+    ) -> String {
         var lines: [String] = []
         let today = Date.now.formatted(date: .long, time: .omitted)
         lines.append("Сегодня: \(today).")
@@ -102,10 +111,42 @@ enum DailySummaryService {
             lines.append("- \(habit.name): серия \(habit.currentStreak) дн., \(status)")
         }
 
+        lines.append("\nЗдоровье:")
+        if let steps {
+            lines.append("- шагов сегодня: \(steps)")
+        }
+        if let sleepHours, sleepHours > 0 {
+            lines.append("- сон прошлой ночью: \(String(format: "%.1f", sleepHours)) ч.")
+        }
+        if steps == nil && (sleepHours ?? 0) == 0 {
+            lines.append("- данных нет")
+        }
+
+        let monthTransactions = transactions.filter {
+            Calendar.current.isDate($0.date, equalTo: .now, toGranularity: .month)
+        }
+        if monthTransactions.isEmpty {
+            lines.append("\nФинансы за текущий месяц: данных нет.")
+        } else {
+            let income = monthTransactions.filter { !$0.isExpense }.reduce(Decimal(0)) { $0 + $1.amount }
+            let expenses = monthTransactions.filter(\.isExpense).reduce(Decimal(0)) { $0 + $1.amount }
+            lines.append("\nФинансы за текущий месяц: доходы \(income.asCurrency), расходы \(expenses.asCurrency).")
+            let grouped = Dictionary(grouping: monthTransactions.filter(\.isExpense), by: \.category)
+                .mapValues { $0.reduce(Decimal(0)) { $0 + $1.amount } }
+            for (category, total) in grouped.sorted(by: { $0.value > $1.value }).prefix(3) {
+                lines.append("- \(category): \(total.asCurrency)")
+            }
+        }
+
         return lines.joined(separator: "\n")
     }
 
-    static func ruleBasedSummary(tasks: [TaskItem], habits: [Habit]) -> String {
+    static func ruleBasedSummary(
+        tasks: [TaskItem],
+        habits: [Habit],
+        steps: Int? = nil,
+        sleepHours: Double? = nil
+    ) -> String {
         let active = tasks.filter { !$0.isDone }
         let overdue = active.filter(\.isOverdue)
         let dueToday = active.filter(\.isDueToday)
@@ -131,6 +172,13 @@ enum DailySummaryService {
         } else {
             let names = pendingHabits.prefix(3).map(\.name).joined(separator: ", ")
             parts.append("Осталось по привычкам: \(names).")
+        }
+
+        if let steps {
+            parts.append("Шагов сегодня: \(steps).")
+        }
+        if let sleepHours, sleepHours > 0 {
+            parts.append("Сон: \(String(format: "%.1f", sleepHours)) ч.")
         }
 
         return parts.joined(separator: " ")

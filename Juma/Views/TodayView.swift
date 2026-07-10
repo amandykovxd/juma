@@ -5,6 +5,7 @@ struct TodayView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \TaskItem.createdAt, order: .reverse) private var tasks: [TaskItem]
     @Query(sort: \Habit.createdAt) private var habits: [Habit]
+    @Query(sort: \MoneyTransaction.date, order: .reverse) private var transactions: [MoneyTransaction]
 
     enum SummaryState {
         case idle
@@ -14,6 +15,10 @@ struct TodayView: View {
     }
 
     @State private var summaryState: SummaryState = .idle
+    @State private var healthService = HealthService()
+    @State private var isExportPresented = false
+    /// Пользователь уже подключал Здоровье — обновляем данные автоматически.
+    @AppStorage("healthConnected") private var healthConnected = false
 
     private var todayTasks: [TaskItem] {
         tasks
@@ -27,8 +32,26 @@ struct TodayView: View {
                 summarySection
                 tasksSection
                 habitsSection
+                healthSection
             }
             .navigationTitle("Сегодня")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        isExportPresented = true
+                    } label: {
+                        Label("Экспорт", systemImage: "square.and.arrow.up")
+                    }
+                }
+            }
+            .sheet(isPresented: $isExportPresented) {
+                ExportView()
+            }
+            .task {
+                if healthConnected {
+                    await healthService.connectAndLoad()
+                }
+            }
         }
     }
 
@@ -59,6 +82,7 @@ struct TodayView: View {
                     summaryRow(icon: "target", title: "Фокус", text: summary.mainFocus)
                     summaryRow(icon: "checklist", title: "Задачи", text: summary.taskAdvice)
                     summaryRow(icon: "repeat", title: "Привычки", text: summary.habitAdvice)
+                    summaryRow(icon: "heart.fill", title: "Здоровье и финансы", text: summary.healthAdvice)
                     regenerateButton
                 }
                 .padding(.vertical, 4)
@@ -109,8 +133,19 @@ struct TodayView: View {
 
     private func generateSummary() {
         summaryState = .generating
-        let context = DailySummaryService.contextDescription(tasks: tasks, habits: habits)
-        let fallback = DailySummaryService.ruleBasedSummary(tasks: tasks, habits: habits)
+        let context = DailySummaryService.contextDescription(
+            tasks: tasks,
+            habits: habits,
+            transactions: transactions,
+            steps: healthService.todaySteps,
+            sleepHours: healthService.lastNightSleepHours
+        )
+        let fallback = DailySummaryService.ruleBasedSummary(
+            tasks: tasks,
+            habits: habits,
+            steps: healthService.todaySteps,
+            sleepHours: healthService.lastNightSleepHours
+        )
         Task {
             let outcome = await DailySummaryService.makeSummary(context: context, fallbackText: fallback)
             switch outcome {
@@ -134,6 +169,48 @@ struct TodayView: View {
                 TaskRowView(task: task)
             }
         }
+    }
+
+    // MARK: - Здоровье
+
+    @ViewBuilder
+    private var healthSection: some View {
+        Section("Здоровье") {
+            if !healthConnected {
+                Button {
+                    healthConnected = true
+                    Task { await healthService.connectAndLoad() }
+                } label: {
+                    Label("Подключить Здоровье (шаги и сон)", systemImage: "heart.fill")
+                }
+            } else if healthService.isLoading {
+                HStack(spacing: 12) {
+                    ProgressView()
+                    Text("Загрузка данных…")
+                        .foregroundStyle(.secondary)
+                }
+            } else if let errorMessage = healthService.errorMessage {
+                Text(errorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                LabeledContent {
+                    Text("\(healthService.todaySteps ?? 0)")
+                } label: {
+                    Label("Шаги сегодня", systemImage: "figure.walk")
+                }
+                LabeledContent {
+                    Text(sleepText)
+                } label: {
+                    Label("Сон прошлой ночью", systemImage: "bed.double.fill")
+                }
+            }
+        }
+    }
+
+    private var sleepText: String {
+        guard let hours = healthService.lastNightSleepHours, hours > 0 else { return "нет данных" }
+        return String(format: "%.1f ч.", hours)
     }
 
     // MARK: - Привычки
